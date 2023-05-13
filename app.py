@@ -2,7 +2,7 @@ import os
 from dotenv.main import load_dotenv
 from twilio.rest import Client
 from flask import Flask, request
-from twilio.twiml.voice_response import VoiceResponse
+from twilio.twiml.voice_response import VoiceResponse, Gather
 
 load_dotenv()
 
@@ -35,13 +35,21 @@ def make_call():
 @app.route('/answer', methods=['GET', 'POST'])
 def answer_call():
     """Respond call with a brief message"""
-    
+    print(f'Answering the phone call .........')
     # start TwiML response
     resp = VoiceResponse()
     
     # Read  a message to the caller
-    resp.say("Thank you for calling! Have a great day.", voice='alice')
+    resp.say("Thank you for calling", voice='alice')
     
+    # Start our <Gather> verb
+    gather = Gather(num_digits=1)
+    gather.say('For sales, press 1. For support, press 2.')
+    resp.append(gather)
+    print(f'Logging  resp.append(gather):{resp.append(gather)}')
+    # If the user doesn't select an option, redirect them into a loop
+    resp.redirect('/answer ')
+    print(f'Answered the phone call .........')
     return str(resp)
 
 @app.route('/intent_detection_twilio', methods=['POST'])
