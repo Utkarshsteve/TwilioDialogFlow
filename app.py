@@ -8,6 +8,8 @@ load_dotenv()
 
 account_sid = os.environ['ACCOUNT_SID']
 auth_token = os.environ['TWILIO_AUTH_TOKEN']
+to_phone_number = os.environ['TO_PHONE_NUMBER']
+from_phone_number = os.environ['FROM_PHONE_NUMBER']
 client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
@@ -21,8 +23,8 @@ def make_call():
     print('Call Started .....')
     call = client.calls.create(
     url="http://demo.twilio.com/docs/voice.xml",
-    to="+918074286551",
-    from_="+12707177822"
+    to=to_phone_number,
+    from_=from_phone_number
     )
 
     print(call.sid)
