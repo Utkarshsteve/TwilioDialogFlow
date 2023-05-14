@@ -15,10 +15,12 @@ auth_token = os.environ['TWILIO_AUTH_TOKEN']
 to_phone_number = os.environ['TO_PHONE_NUMBER']
 from_phone_number = os.environ['FROM_PHONE_NUMBER']
 answer_endpoint = os.environ['ANSWER_ENDPOINT'] # url endpoint: /answer
+secret_key = os.environ['SECRET_KEY']
 client = Client(account_sid, auth_token)
 
-app = Flask(__name__)
 
+app = Flask(__name__)
+app.secret_key = secret_key # set a secret key for the session
 
 @app.route('/')
 def hello():
@@ -35,7 +37,7 @@ def make_call():
     )
     callSid = call.sid
     session['callSid'] = callSid
-    logging.info(f'Logging call sid:{call.sid}')
+    logging.info(f"Logging call sid:{call.sid}, in session:{session['callSid']}")
     logging.info('Call Complete .....')
     return call.sid
 
@@ -67,7 +69,7 @@ def answer_call():
 def gather():
     """Processes results from the <Gather> prompt in /answer"""
     logging.info(
-        f'Performing operation based on user input started for the req:{request.get_json()} ')
+        f'Performing operation based on user input started for the req:{request} ')
     # Start TwiML response
     resp = VoiceResponse()
 
@@ -87,6 +89,7 @@ def gather():
             return str(resp)
         elif choice == '3':
             resp.say('Thanks for calling. Have a great day!')
+            terminateCall()
         else:
             # If the caller didn't choose 1 or 2, apologize and ask them again
             resp.say("Sorry, I don't understand that choice.")
@@ -118,7 +121,6 @@ def terminateCall():
     logging.info(f'Logging caller sid in terminated call:{callSid}')
     call = client.calls(callSid) \
         .update(status='completed')
-
     logging.info(f'Logging call to..{call.to}')
     logging.info(F'Call Terminated...')
     return call.to
