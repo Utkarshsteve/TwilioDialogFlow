@@ -1,3 +1,5 @@
 *.env
 PythonTwilioDialogflow/
 .vscode/
+__pycache__/
+instance/

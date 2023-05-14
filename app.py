@@ -1,9 +1,13 @@
 import os
+import uuid
 from dotenv.main import load_dotenv
 import logging
 from twilio.rest import Client
 from flask import Flask, request
 from flask import session
+from db import db
+from models import CallSidModel
+
 from twilio.twiml.voice_response import VoiceResponse, Gather
 
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +24,13 @@ client = Client(account_sid, auth_token)
 
 
 app = Flask(__name__)
+SESSION_TYPE = 'filesystem'
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ['SQLALCHEMY_DATABASE_URI']
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db.init_app(app)
 app.secret_key = secret_key # set a secret key for the session
+with app.app_context():
+    db.create_all()
 
 @app.route('/')
 def hello():
@@ -36,8 +46,13 @@ def make_call():
         from_=from_phone_number
     )
     callSid = call.sid
-    session['callSid'] = callSid
-    logging.info(f"Logging call sid:{call.sid}, in session:{session['callSid']}")
+    name = 'TESTUSER'+ uuid.uuid4().hex
+    try:
+        logging.info(f"Logging call sid:{callSid}")
+        CallSidModel.create(name, callSid)
+    except Exception as e:
+        logging.error(f'Error inserting data into db...:{e}')
+    
     logging.info('Call Complete .....')
     return call.sid
 
@@ -89,7 +104,7 @@ def gather():
             return str(resp)
         elif choice == '3':
             resp.say('Thanks for calling. Have a great day!')
-            terminateCall()
+            return str(resp)
         else:
             # If the caller didn't choose 1 or 2, apologize and ask them again
             resp.say("Sorry, I don't understand that choice.")
@@ -117,13 +132,19 @@ def webhook():
 
 def terminateCall():
     logging.info(f'Terminating the call.....')
-    callSid = session.get('callSid')
-    logging.info(f'Logging caller sid in terminated call:{callSid}')
-    call = client.calls(callSid) \
-        .update(status='completed')
-    logging.info(f'Logging call to..{call.to}')
-    logging.info(F'Call Terminated...')
-    return call.to
+     # Start TwiML response
+    latest_record = CallSidModel.query.order_by(CallSidModel.id.desc()).first()
+    callSid  = latest_record.sid
+    logging.info(f'Logging latest record sid...{callSid}')
+    try:
+        call = client.calls(callSid) \
+            .update(status='completed')
+        call_to = call.to
+        logging.info(f'Logging call to..{call.to}')
+        logging.info(f'Call Terminated...')
+    except Exception as e:
+        logging.error(f'Exception occured while terminating the call due to error:{e}')
+    return call_to
 
 
 if __name__ == '__main__':
