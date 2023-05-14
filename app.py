@@ -2,9 +2,9 @@ import os
 import uuid
 from dotenv.main import load_dotenv
 import logging
+import requests
 from twilio.rest import Client
 from flask import Flask, request
-from flask import session
 from db import db
 from models import CallSidModel
 
@@ -19,6 +19,7 @@ auth_token = os.environ['TWILIO_AUTH_TOKEN']
 to_phone_number = os.environ['TO_PHONE_NUMBER']
 from_phone_number = os.environ['FROM_PHONE_NUMBER']
 answer_endpoint = os.environ['ANSWER_ENDPOINT'] # url endpoint: /answer
+call_endpoint = os.environ['CALL_ENDPOINT']
 secret_key = os.environ['SECRET_KEY']
 client = Client(account_sid, auth_token)
 
@@ -46,32 +47,44 @@ def make_call():
         from_=from_phone_number
     )
     callSid = call.sid
-    name = 'TESTUSER'+ uuid.uuid4().hex
+    data = request.get_json()
+    logging.info(f'Logging data in call endpoint:{data}')
+    name = data['customer_name']
+    phone_number = data['phone_number']
+    
     try:
-        logging.info(f"Logging call sid:{callSid}")
-        CallSidModel.create(name, callSid)
+        logging.info(f"Logging call with name:{name}, phone_number:{phone_number} and sid:{callSid}")
+        CallSidModel.create(name, callSid, phone_number)
     except Exception as e:
         logging.error(f'Error inserting data into db...:{e}')
     
     logging.info('Call Complete .....')
     return call.sid
 
-
 @app.route('/answer', methods=['GET', 'POST'])
 def answer_call():
     """Respond call with a brief message"""
     logging.info(f'Answering the phone call .........')
+    
+    latest_record = get_latest_record()
+
     # start TwiML response
     resp = VoiceResponse()
-    customer_name = "Jaya Prakash"
+    name = latest_record.name
+    phone_number = latest_record.phone_number
+    if name and phone_number:
+        customer_name = name
+        logging.info(f'Logging name of customer from Dialogflow:{customer_name}')
+    else:
+        customer_name = "Jaya Prakash"
     # Read  a message to the caller
     resp.say(
-        f"Hi {customer_name}! We are Clear One Advantage and do Loan Consolidation", voice='alice')
+        f"Hi {customer_name}! We are Clear One Advantage and do Loan Consolidation", voice_type = 'en-US-Wavenet-F',  pitch = 0)
 
     # Start our <Gather> verb
     gather = Gather(num_digits=1, action='/gather')
     gather.say(
-        'Press 1 if you want to talk to Sales. Press 2 if you want to talk to Support. Press 3 to end the call.')
+        'Press 1 if you want to talk to Sales. Press 2 if you want to talk to Support. Press 3 to end the call.', voice_type = 'en-US-Wavenet-F',  pitch = 0)
     resp.append(gather)
     logging.info(f'Logging  resp:{resp}')
     # If the user doesn't select an option, redirect them into a loop
@@ -124,16 +137,29 @@ def twilio_intent():
 
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
-    logging.info(f'Inside dialogflow..............')
+    logging.info(f'Webhook started for dialog flow..............')
     payload = request.get_json(force=True)
-    logging.info(f'Logging payload data:{payload}')
-    return {'fulfillmentText': 'Yoo, was up?'}
+    customer_name = payload['queryResult']['parameters'].get('Customer_Name')
+    phone_number = payload['queryResult']['parameters'].get('Phone_Number')
 
+    logging.info(f'Logging customer name:{customer_name} and phone_number:{phone_number}.............')
+    # Make API call with the customer name and phone number
+    api_url = call_endpoint
+    payload = {'customer_name': customer_name, 'phone_number': phone_number}
+    response = requests.post(api_url, json=payload)
+    
+    fulfillment_text = 'API call successful' if response.status_code == 200 else 'API call failed'
+    
+    return ({'fulfillmentText': fulfillment_text})
+
+def get_latest_record():
+    latest_record = CallSidModel.query.order_by(CallSidModel.id.desc()).first()
+    return latest_record
 
 def terminateCall():
     logging.info(f'Terminating the call.....')
      # Start TwiML response
-    latest_record = CallSidModel.query.order_by(CallSidModel.id.desc()).first()
+    latest_record = get_latest_record()
     callSid  = latest_record.sid
     logging.info(f'Logging latest record sid...{callSid}')
     try:
