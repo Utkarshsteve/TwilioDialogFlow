@@ -14,29 +14,31 @@ account_sid = os.environ['ACCOUNT_SID']
 auth_token = os.environ['TWILIO_AUTH_TOKEN']
 to_phone_number = os.environ['TO_PHONE_NUMBER']
 from_phone_number = os.environ['FROM_PHONE_NUMBER']
-answer_url = os.environ['ANSWER_URL']
+answer_endpoint = os.environ['ANSWER_ENDPOINT'] # url endpoint: /answer
 client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
+
 
 @app.route('/')
 def hello():
     return "Hello World!"
 
+
 @app.route('/call', methods=['GET', "POST"])
 def make_call():
     logging.info('Call Started .....')
     call = client.calls.create(
-    url=answer_url,
-    to=to_phone_number,
-    from_=from_phone_number
+        url=answer_endpoint,
+        to=to_phone_number,
+        from_=from_phone_number
     )
     callSid = call.sid
     session['callSid'] = callSid
-    logging.info(call.sid)
+    logging.info(f'Logging call sid:{call.sid}')
     logging.info('Call Complete .....')
     return call.sid
-    
+
 
 @app.route('/answer', methods=['GET', 'POST'])
 def answer_call():
@@ -46,11 +48,13 @@ def answer_call():
     resp = VoiceResponse()
     customer_name = "Jaya Prakash"
     # Read  a message to the caller
-    resp.say(f"Hi {customer_name}! We are Clear One Advantage and do Loan Consolidation", voice='alice')
-    
+    resp.say(
+        f"Hi {customer_name}! We are Clear One Advantage and do Loan Consolidation", voice='alice')
+
     # Start our <Gather> verb
     gather = Gather(num_digits=1, action='/gather')
-    gather.say('Press 1 if you want to talk to Sales. Press 2 if you want to talk to Support. Press 3 to end the call.')
+    gather.say(
+        'Press 1 if you want to talk to Sales. Press 2 if you want to talk to Support. Press 3 to end the call.')
     resp.append(gather)
     logging.info(f'Logging  resp:{resp}')
     # If the user doesn't select an option, redirect them into a loop
@@ -58,10 +62,12 @@ def answer_call():
     logging.info(f'Answered the phone call .........')
     return str(resp)
 
+
 @app.route('/gather', methods=['GET', 'POST'])
 def gather():
-    """Processes results from the <Gather> prompt in /voice"""
-    logging.info(f'Performing operation based on user input started for the req:{request.get_json()} ')
+    """Processes results from the <Gather> prompt in /answer"""
+    logging.info(
+        f'Performing operation based on user input started for the req:{request.get_json()} ')
     # Start TwiML response
     resp = VoiceResponse()
 
@@ -90,11 +96,13 @@ def gather():
 
     return str(resp)
 
+
 @app.route('/intent_detection_twilio', methods=['POST'])
 def twilio_intent():
     logging.info(f'Detecting twilio intent......')
-    
+
     return "200"
+
 
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
@@ -102,17 +110,19 @@ def webhook():
     payload = request.get_json(force=True)
     logging.info(f'Logging payload data:{payload}')
     return {'fulfillmentText': 'Yoo, was up?'}
-    
+
+
 def terminateCall():
     logging.info(f'Terminating the call.....')
     callSid = session.get('callSid')
     logging.info(f'Logging caller sid in terminated call:{callSid}')
-    logging.info(f'Logging callSid in terminate call:{callSid}')
     call = client.calls(callSid) \
-             .update(status='completed')
-             
+        .update(status='completed')
+
     logging.info(f'Logging call to..{call.to}')
     logging.info(F'Call Terminated...')
     return call.to
+
+
 if __name__ == '__main__':
     app.run()
